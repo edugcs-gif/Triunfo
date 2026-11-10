@@ -1,0 +1,10 @@
+# Planilhas com dados do cadastro: nao vao para o GitHub
+*.xlsx
+*.xlsm
+*.xls
+*.backup
+~$*
+
+# Python
+__pycache__/
+*.pyc
