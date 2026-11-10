@@ -1,72 +1,74 @@
-# Triunfo
+# gerar_atualizada.py
 
-Script para atualização da tabela de cadastros imobiliários de Triunfo/RS a partir dos dados coletados em campo.
-
-O `gerar_atualizada.py` cruza a aba **prefeitura** (cadastro atual) com a aba **bruta** (dados de campo) e grava o resultado na aba **atualizada** do mesmo arquivo `.xlsx`. As células alteradas ficam pintadas.
-
-## Requisitos
-
-- Python 3
-- [openpyxl](https://pypi.org/project/openpyxl/)
-
-```bash
-pip install openpyxl
-```
+Cruza o cadastro imobiliário da prefeitura de Triunfo/RS com a coleta de campo da Solo e grava, no mesmo arquivo Excel, a aba `atualizada` com as células alteradas pintadas.
 
 ## Como rodar
 
-1. Feche o `.xlsx` no Excel, porque o Windows não deixa sobrescrever um arquivo aberto.
-2. Coloque o script na mesma pasta da planilha. O nome padrão da planilha é `tabela atualizacao.xlsx` e pode ser mudado em `ARQUIVO`.
-3. Dê dois cliques no script ou rode:
+1. Instale o Python 3 e a biblioteca: `pip install openpyxl`.
+2. Coloque o script na mesma pasta de `tabela atualizacao.xlsx` e feche o arquivo no Excel.
+3. Dê dois cliques no script ou rode `python gerar_atualizada.py`.
 
-```bash
-python gerar_atualizada.py
-```
+A rodada leva de 2 a 4 minutos. Antes de salvar, o script grava uma cópia `.backup` do arquivo.
 
-Antes de salvar, o script faz uma cópia `.backup` da planilha.
+## Entrada
 
-## Abas da planilha
-
-| Aba | Para que serve |
+| Aba | Conteúdo |
 |---|---|
-| `prefeitura` | Cadastro atual. O cabeçalho fica na linha 2 e cada linha é uma unidade de avaliação (cadastro + unidade). |
-| `bruta` | Dados coletados em campo. |
-| `depara` | Diz qual coluna da bruta atualiza qual coluna da prefeitura. As colunas são `planilha_bruta__unidades` (origem), `modelo` (destino) e `montar` (marque `agora` para usar o par). |
-| `cancelados` | (opcional) Cadastros cancelados por unificação e o cadastro que fica. |
-| `atualizada` | Saída, recriada a cada rodada. |
-| `comparacao`, `unidades sem coleta`, `cadastros no mesmo lote` | Relatórios de conferência gerados pelo script. |
+| `prefeitura` | Cadastro oficial, uma linha por unidade de avaliação. Cabeçalho na linha 2. |
+| `bruta` | Coleta de campo, uma linha por edificação. Cabeçalho na linha 1. |
+| `depara` | Qual coluna da coleta (`planilha_bruta__unidades`) atualiza qual coluna da prefeitura (`modelo`). Só entram as linhas com `montar` = "agora". |
+| `cancelados` (opcional) | Cadastro cancelado na primeira coluna; na `Observação`, o cadastro que fica ou "baixado". |
 
-Para mapear uma coluna nova não é preciso mexer no código: basta editar a aba `depara`.
+## Saída
+
+Quatro abas, recriadas a cada rodada:
+
+| Aba | Conteúdo |
+|---|---|
+| `atualizada` | Os cadastros tocados pela coleta ou por alguma regra, na estrutura da prefeitura, seguidos das colunas da Solo e das colunas de controle. |
+| `comparacao` | Resumo da rodada e comparação de áreas por cadastro (lote, matrícula e área construída). |
+| `unidades sem coleta` | Unidades sem dado de campo em cadastro que teve outra unidade atualizada. |
+| `cadastros no mesmo lote` | Lotes com mais de um cadastro. |
+
+### Como ler a aba atualizada
+
+A coluna `_situacao` classifica cada linha; `_situacao_historico` traz o detalhe e `_status` a explicação.
+
+| `_situacao` | Significado |
+|---|---|
+| ATUALIZADO | Linha da prefeitura que recebeu ou confirmou o dado de campo (inclui complementar e condomínio). |
+| UNIDADE NOVA | Unidade que não existia no cadastro (inclui linha principal e lote baldio). |
+| CADASTRO NOVO | Número que não existe na prefeitura, ou coleta sem número. |
+| UNIDADE BAIXADA | Unidade a baixar: lista manual, lote que virou baldio ou unidade sem coleta. |
+| CADASTRO BAIXADO | Cadastro cancelado, ou que ficou sem atualizar porque outro cadastro do lote recebeu a coleta. |
+| CONFERIR | `Edificacoes_num_cadastro` mal preenchido; a linha não foi vinculada. |
+
+Cores: amarelo = alterado; cinza = confirmado em campo; laranja = mantido por regra; verde = linha nova; azul = principal; lilás = baldio novo; verde-água = condomínio; vermelho = baixa, não atualizar ou conferir.
 
 ## Regras principais
 
-- Célula da bruta preenchida e diferente da prefeitura: o valor é atualizado.
-- Célula da bruta vazia ou com texto nulo (`nulo`, `null`, `-`...): fica o dado da prefeitura.
-- Registro que só existe na bruta: entra como linha nova.
-- Cadastros desativados (`17-Situação Cadastro` diferente de 1) são ignorados.
-- **Edificação compartilhada** (mesmo `uuid_edificacao`):
-  - 1 para 1: atualiza normalmente;
-  - vários registros e algum tem matrícula: a área da prefeitura é mantida;
-  - vários registros e nenhum tem matrícula: é criada uma linha **PRINCIPAL** com a área da edificação, e os registros de origem viram **COMPLEMENTAR**.
-- **Um cadastro por lote**: se o lote tem mais de um cadastro, só um recebe o dado de campo. A escolha vai primeiro para o cadastro com matrícula e depois para o de maior área construída.
-- **Lote baldio**: se a coleta diz que o lote é baldio e o cadastro ainda tem edificação, é criada uma linha de baldio e as unidades existentes não são tocadas.
-- **Condomínio**: uma edificação com cadastros de 3 ou mais matrículas diferentes vira uma linha de condomínio, e os cadastros membros ficam intocados.
-- Cadastros listados em `CADASTROS_BAIXADOS` ou na aba `cancelados` saem marcados para baixar.
+- **Vínculo**: primeiro por `Edificacoes_num_cadastro` (`cadastro.unidade`), depois por `Lotes_num_cadastr` + `unidade`. Sem vínculo, a linha entra como unidade nova ou cadastro novo.
+- **Atualização**: valor diferente troca o da prefeitura; coleta vazia mantém. O número do cadastro e o da unidade nunca são trocados.
+- **Cadastro desativado** (`17-Situação Cadastro` diferente de 1): fica fora do processo.
+- **Edificação dividida** por mais de um cadastro ou unidade: a área da unidade (`140`) não é atualizada e entra uma linha PRINCIPAL com a área coletada.
+- **Mais de um cadastro** na mesma célula ou no mesmo lote: fica um só, o que tem matrícula e, no empate, o de maior área construída.
+- **Condomínio**: edificação com cadastros de 3 ou mais matrículas diferentes ganha uma linha própria; os membros mantêm área, proprietário e CPF da prefeitura.
+- **Lote baldio** (`Lotes_cd_ocupacao` = 4): as unidades do cadastro são marcadas para baixa e entra uma linha de terreno.
+- **Cancelados**: o cancelado é baixado e o cadastro que fica recebe a matrícula e a área de matrícula dele. Com "baixado" na `Observação`, só baixa.
+- **Coleta em cadastro baixado ou cancelado**: é descartada e listada no relatório da rodada.
+- **Limpeza**: "nulo", "null", "-" e similares contam como vazio. No `156-Responsável` também ".", "0" e "sem informação". O `157-CPF/CNPJ Responsável` fica só com os dígitos.
 
-Todas essas regras podem ser ligadas, desligadas ou ajustadas no bloco **CONFIGURAÇÃO**, no topo do script.
+## Configuração
 
-## Cores na aba `atualizada`
+Tudo fica no topo do script, em constantes em maiúsculas. As mais usadas:
 
-| Cor | Significado |
+| Constante | Para que serve |
 |---|---|
-| Amarelo | Valor trocado pelo dado de campo |
-| Cinza | A coleta confirmou o valor da prefeitura |
-| Verde | Linha nova (registro que só existe na coleta) |
-| Azul | Linha principal da edificação compartilhada |
-| Laranja | Área mantida por causa da regra da edificação |
-| Lilás | Linha nova de lote baldio |
-| Verde-água | Condomínio (forte) e cadastros membros (claro) |
-| Rosa | Unidade sem coleta em cadastro que teve outra unidade atualizada |
-| Vermelho | Cadastro mal preenchido, que não recebe o dado de campo ou que deve ser baixado |
+| `ARQUIVO` | Nome da planilha. Vazio = usa o único .xlsx da pasta. |
+| `CADASTROS_BAIXADOS` | Lista manual de cadastros a baixar. |
+| `TEXTOS_NULOS`, `TEXTOS_NULOS_POR_COLUNA` | Textos da coleta que contam como vazio. |
+| `COLUNAS_SO_DIGITOS` | Colunas de documento que ficam só com os dígitos. |
+| `CONDOMINIO_MIN_MATRICULAS` | Mínimo de matrículas diferentes para virar condomínio. |
+| `COMPARACOES` | Pares de colunas e limites de alerta da aba `comparacao`. |
 
-As colunas `_situacao` e `_status`, no fim da aba, permitem filtrar as linhas por tipo de alteração (ATUALIZADO, UNIDADE NOVA, CADASTRO NOVO, CADASTRO BAIXADO etc.).
+Para mapear uma coluna nova não é preciso mexer no código: basta incluir a linha na aba `depara`.
